@@ -1,0 +1,3 @@
+[submodule "Assets/XiheRendering"]
+	path = Assets/XiheRendering
+	url = https://github.com/sky-haihai/XiheRendering.git
