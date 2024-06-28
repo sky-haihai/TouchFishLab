@@ -1,6 +1,9 @@
 Shader "OilPaint/BrushStrokeInstancing" {
     Properties {
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
+        _NormalTex ("Normal (RGB)", 2D) = "white" {}
+        _YCount ("Row Count", Float) = 1
+        _XCount ("Column Count", Float) = 1
     }
     SubShader {
         Cull Off
@@ -31,7 +34,11 @@ Shader "OilPaint/BrushStrokeInstancing" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(float, _RotationRandomness)
                 UNITY_DEFINE_INSTANCED_PROP(float, _Scale)
+                UNITY_DEFINE_INSTANCED_PROP(float3, _BaseMeshScale)
+                UNITY_DEFINE_INSTANCED_PROP(float, _HeightOffset)
+                UNITY_DEFINE_INSTANCED_PROP(float, _AlphaCutoff)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             struct Attributes
@@ -51,51 +58,60 @@ Shader "OilPaint/BrushStrokeInstancing" {
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
 
+            TEXTURE2D(_NormalTex);
+            SAMPLER(sampler_NormalTex);
+
+            float _XCount;
+            float _YCount;
+
             StructuredBuffer<float3> _PositionBuffer;
             StructuredBuffer<float3> _NormalBuffer;
             StructuredBuffer<float4> _TangentBuffer;
 
-            float random(float2 p)
+            float Random01(float seed)
             {
-                float2 K1 = float2(
-                    23.14069263277926, // e^pi (Gelfond's constant)
-                    2.665144142690225 // 2^sqrt(2) (Gelfondâ€“Schneider constant)
-                );
-                return frac(cos(dot(p, K1)) * 12345.6789);
+                seed = frac(sin(seed) * 43758.5453);
+                return seed;
             }
+
 
             Varyings Vertex(Attributes IN, uint instanceID : SV_InstanceID)
             {
-                float3 meshPosWS = TransformObjectToWorld(float3(0, 0, 0));
                 float3 strokePosOS = _PositionBuffer[instanceID].xyz;
+                float3 meshPosWS = TransformObjectToWorld(0);
+
                 float3 strokeNormal = _NormalBuffer[instanceID].xyz;
                 float3 strokeTangent = _TangentBuffer[instanceID].xyz;
-                float3 vertexOffset = IN.vertex.xyz * float3(2, 1, 1);
+                float3 vertexOffset = IN.vertex.xyz * float3(1.5, 1, 1);
                 float3 binormal = -cross(strokeNormal, strokeTangent);
-                binormal += (random(float2(strokeNormal.z, instanceID)) * 2 - 1) * 0.2 * strokeTangent;
+                binormal += (Random01(instanceID) * 2 - 1) * _RotationRandomness * strokeTangent;
                 binormal = normalize(binormal);
                 strokeTangent = cross(strokeNormal, binormal);
 
                 float3 x = strokeTangent * vertexOffset.x;
                 float3 y = strokeNormal * vertexOffset.y;
                 float3 z = binormal * vertexOffset.z;
-                vertexOffset = x + y + z + +random(float2(instanceID, vertexOffset.x)) * 0.1 * strokeNormal;
+                vertexOffset = x + y + z + Random01(instanceID) * _HeightOffset * strokeNormal;
 
                 Varyings o;
-                o.positionHCS = TransformWorldToHClip(meshPosWS + strokePosOS + vertexOffset * _Scale);
-                o.uv = IN.uv.xy;
-                o.normalWS = normalize(TransformObjectToWorldNormal(strokeNormal));;
+                o.positionHCS = TransformWorldToHClip(meshPosWS + strokePosOS * _BaseMeshScale + vertexOffset * _Scale);
+
+                float uvX = IN.uv.x / _XCount + clamp(floor(Random01(instanceID) * _XCount), 0, _XCount - 1) / _XCount;
+                float uvY = IN.uv.y / _YCount + clamp(floor(Random01(instanceID) * _YCount), 0, _YCount - 1) / _YCount;
+                o.uv = float2(uvX, uvY);
+
+                o.normalWS = normalize(TransformObjectToWorldNormal(strokeNormal));
                 return o;
             }
 
             float4 Fragment(Varyings IN) : SV_Target
             {
                 float4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, IN.uv);
-                clip(albedo.r - 0.1);
+                float4 normal = SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, IN.uv);
+                clip(albedo.r - _AlphaCutoff);
                 Light mainLight = GetMainLight();
                 float ndotl = dot(IN.normalWS, mainLight.direction);
-                // ndotl = ndotl * 0.5 + 0.5;
-                albedo.rgb = lerp(float3(1, 1, 1), float3(0.3, 0.3, 0.3), 1 - ndotl);
+                albedo.rgb = lerp(float3(1,1,1), float3(0.3, 0.3, 0.3), 1 - ndotl);
 
                 float4 output = albedo;
 

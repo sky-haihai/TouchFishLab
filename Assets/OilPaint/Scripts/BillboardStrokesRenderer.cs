@@ -9,21 +9,31 @@ namespace OilPaint.Scripts {
         public Material material;
         public MeshFilter baseMeshFilter;
         public MeshRenderer baseMeshRenderer;
-        public int subMeshIndex = 0;
 
         // material
         public float scale = 1;
-        public int layer;
-        public ShadowCastingMode castShadows = ShadowCastingMode.On;
 
-        // instancing
-        // public ComputeShader instantiateStrokeShader;
+        [Range(0, 1f)]
+        public float rotationRandomness = 0.5f;
+
+        [Range(0, 1f)]
+        public float bumpiness = 0.2f;
+
+        [Range(0, 1f)]
+        public float alphaCutoff = 0.2f;
+
+        public int layer;
 
         public bool renderInSceneCamera = true;
         public bool enableDebug = false;
 
         private Vector3 m_Dimension = Vector3.zero;
         private Vector3 m_CachedDimension = Vector3.zero;
+        private float m_CachedRotationRandomness = 0;
+        private Vector3 m_CachedBaseMeshScale = Vector3.zero;
+        private float m_CachedBumpiness = 0;
+        private float m_CachedAlphaCutoff = 0;
+
 
         private Material m_InstancedMaterial;
         private ComputeBuffer m_PositionBuffer;
@@ -37,12 +47,10 @@ namespace OilPaint.Scripts {
         private static readonly int NormalBuffer = Shader.PropertyToID("_NormalBuffer");
         private static readonly int TangentBuffer = Shader.PropertyToID("_TangentBuffer");
         private static readonly int Scale = Shader.PropertyToID("_Scale");
-
-        private struct StrokeData {
-            public Vector3 position;
-            public Vector3 normal;
-            public Vector3 tangent;
-        }
+        private static readonly int RotationRandomness = Shader.PropertyToID("_RotationRandomness");
+        private static readonly int BaseMeshScale = Shader.PropertyToID("_BaseMeshScale");
+        private static readonly int HeightOffset = Shader.PropertyToID("_HeightOffset");
+        private static readonly int AlphaCutoff = Shader.PropertyToID("_AlphaCutoff");
 
         private void OnValidate() {
             if (baseMeshFilter == null) baseMeshFilter = GetComponent<MeshFilter>();
@@ -71,25 +79,25 @@ namespace OilPaint.Scripts {
         void Update() {
             m_Dimension = baseMeshRenderer.bounds.size;
             // Update starting position buffer
-            // if (m_CachedDimension != m_Dimension) {
-            UpdateBuffers();
-            // }
+            if (m_CachedDimension != m_Dimension || Math.Abs(m_CachedRotationRandomness - rotationRandomness) > 0.01f ||
+                (transform.localScale.magnitude - m_CachedBaseMeshScale.magnitude) > 0.01f || (m_CachedBumpiness - bumpiness) > 0.01f ||
+                (m_CachedAlphaCutoff - alphaCutoff) > 0.01f) {
+                UpdateBuffers();
+            }
 
             // Render
-            Graphics.DrawMeshInstancedIndirect(mesh, subMeshIndex, m_InstancedMaterial, new Bounds(transform.position, m_Dimension), m_ArgsBuffer, 0, m_PropertyBlock,
-                castShadows, true, layer, renderInSceneCamera ? null : UnityEngine.Camera.main);
+            Graphics.DrawMeshInstancedIndirect(mesh, 0, m_InstancedMaterial, new Bounds(transform.position, m_Dimension), m_ArgsBuffer, 0, m_PropertyBlock,
+                ShadowCastingMode.On, true, layer, renderInSceneCamera ? null : UnityEngine.Camera.main);
         }
 
         void UpdateBuffers() {
             if (mesh == null) {
                 m_Args[0] = m_Args[1] = m_Args[2] = m_Args[3] = 0;
                 m_PropertyBlock.Clear();
-                Debug.LogWarning("You forgot to assign a mesh to BrushStrokesRenderer");
+                Debug.LogWarning("You forgot to assign a mesh to BillboardStrokesRenderer");
                 return;
             }
 
-            // Ensure submesh index is in range
-            subMeshIndex = Mathf.Clamp(subMeshIndex, 0, mesh.subMeshCount - 1);
 
             m_Dimension = new Vector3(Mathf.Max(0, m_Dimension.x), Mathf.Max(0, m_Dimension.y), Mathf.Max(0, m_Dimension.z));
 
@@ -101,6 +109,10 @@ namespace OilPaint.Scripts {
             m_InstancedMaterial.SetBuffer(TangentBuffer, m_TangentBuffer);
 
             m_PropertyBlock.SetFloat(Scale, scale);
+            m_PropertyBlock.SetFloat(RotationRandomness, rotationRandomness);
+            m_PropertyBlock.SetVector(BaseMeshScale, transform.localScale);
+            m_PropertyBlock.SetFloat(HeightOffset, bumpiness);
+            m_PropertyBlock.SetFloat(AlphaCutoff, alphaCutoff);
 
             // Args
             // 0 index count per instance,
@@ -108,10 +120,10 @@ namespace OilPaint.Scripts {
             // 2 start index location,
             // 3 base vertex location,
             // 4 start instance location.
-            m_Args[0] = (uint)mesh.GetIndexCount(subMeshIndex);
+            m_Args[0] = (uint)mesh.GetIndexCount(0);
             m_Args[1] = (uint)baseMeshFilter.mesh.vertexCount;
-            m_Args[2] = (uint)mesh.GetIndexStart(subMeshIndex);
-            m_Args[3] = (uint)mesh.GetBaseVertex(subMeshIndex);
+            m_Args[2] = (uint)mesh.GetIndexStart(0);
+            m_Args[3] = (uint)mesh.GetBaseVertex(0);
 
             m_ArgsBuffer.SetData(m_Args);
 
@@ -130,8 +142,13 @@ namespace OilPaint.Scripts {
             if (!enableDebug) {
                 return;
             }
+
             Gizmos.color = Color.red;
             Gizmos.DrawWireCube(transform.position, m_Dimension);
+
+            if (!Application.isPlaying) {
+                return;
+            }
 
             //draw vertex
             for (var i = 0; i < baseMeshFilter.mesh.vertices.Length; i++) {
