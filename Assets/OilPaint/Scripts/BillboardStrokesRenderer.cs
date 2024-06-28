@@ -39,6 +39,7 @@ namespace OilPaint.Scripts {
         private ComputeBuffer m_PositionBuffer;
         private ComputeBuffer m_NormalBuffer;
         private ComputeBuffer m_TangentBuffer;
+        private ComputeBuffer m_ColorBuffer;
 
         private ComputeBuffer m_ArgsBuffer;
         private readonly uint[] m_Args = new uint[5] { 0, 0, 0, 0, 0 };
@@ -51,6 +52,7 @@ namespace OilPaint.Scripts {
         private static readonly int BaseMeshScale = Shader.PropertyToID("_BaseMeshScale");
         private static readonly int HeightOffset = Shader.PropertyToID("_HeightOffset");
         private static readonly int AlphaCutoff = Shader.PropertyToID("_AlphaCutoff");
+        private static readonly int ColorBuffer = Shader.PropertyToID("_ColorBuffer");
 
         private void OnValidate() {
             if (baseMeshFilter == null) baseMeshFilter = GetComponent<MeshFilter>();
@@ -61,19 +63,25 @@ namespace OilPaint.Scripts {
             if (m_PositionBuffer == null) m_PositionBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
             if (m_NormalBuffer == null) m_NormalBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
             if (m_TangentBuffer == null) m_TangentBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
+            if (m_ColorBuffer == null) m_ColorBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
+
             if (m_ArgsBuffer == null) m_ArgsBuffer = new ComputeBuffer(1, m_Args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
             if (m_InstancedMaterial == null) m_InstancedMaterial = new Material(material);
 
             m_PropertyBlock = new MaterialPropertyBlock();
             UpdateBuffers();
+            baseMeshRenderer.enabled = false;
         }
 
         private void OnEnable() {
             if (m_PositionBuffer == null) m_PositionBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
             if (m_NormalBuffer == null) m_NormalBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
             if (m_TangentBuffer == null) m_TangentBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
+            if (m_ColorBuffer == null) m_ColorBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
+
             if (m_ArgsBuffer == null) m_ArgsBuffer = new ComputeBuffer(1, m_Args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
             if (m_InstancedMaterial == null) m_InstancedMaterial = new Material(material);
+            baseMeshRenderer.enabled = false;
         }
 
         void Update() {
@@ -104,9 +112,11 @@ namespace OilPaint.Scripts {
             m_PositionBuffer.SetData(baseMeshFilter.mesh.vertices);
             m_NormalBuffer.SetData(baseMeshFilter.mesh.normals);
             m_TangentBuffer.SetData(baseMeshFilter.mesh.tangents);
+            m_ColorBuffer.SetData(baseMeshFilter.mesh.colors);
             m_InstancedMaterial.SetBuffer(PositionBuffer, m_PositionBuffer);
             m_InstancedMaterial.SetBuffer(NormalBuffer, m_NormalBuffer);
             m_InstancedMaterial.SetBuffer(TangentBuffer, m_TangentBuffer);
+            m_InstancedMaterial.SetBuffer(ColorBuffer, m_ColorBuffer);
 
             m_PropertyBlock.SetFloat(Scale, scale);
             m_PropertyBlock.SetFloat(RotationRandomness, rotationRandomness);
@@ -134,6 +144,7 @@ namespace OilPaint.Scripts {
             if (m_ArgsBuffer != null)
                 m_ArgsBuffer.Release();
             m_ArgsBuffer = null;
+            baseMeshRenderer.enabled = true;
         }
 
 #if UNITY_EDITOR

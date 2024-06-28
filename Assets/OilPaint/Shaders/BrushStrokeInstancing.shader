@@ -2,8 +2,10 @@ Shader "OilPaint/BrushStrokeInstancing" {
     Properties {
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
         _NormalTex ("Normal (RGB)", 2D) = "white" {}
+        _NormalStrength ("Normal Strength", Float) = 1
         _YCount ("Row Count", Float) = 1
         _XCount ("Column Count", Float) = 1
+        _ShadowColor ("Shadow Color", Color) = (0,0,0,1)
     }
     SubShader {
         Cull Off
@@ -21,8 +23,6 @@ Shader "OilPaint/BrushStrokeInstancing" {
             Tags {
                 "LightMode" = "UniversalForward"
             }
-
-            Blend SrcAlpha OneMinusSrcAlpha
 
             HLSLPROGRAM
             #pragma vertex Vertex
@@ -52,6 +52,9 @@ Shader "OilPaint/BrushStrokeInstancing" {
                 float4 positionHCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalWS: TEXCOORD1;
+                float3 tangentWS: TEXCOORD2;
+                float3 binormalWS: TEXCOORD3;
+                float4 vertexColor : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -61,16 +64,19 @@ Shader "OilPaint/BrushStrokeInstancing" {
             TEXTURE2D(_NormalTex);
             SAMPLER(sampler_NormalTex);
 
+            float _NormalStrength;
             float _XCount;
             float _YCount;
+            float3 _ShadowColor;
 
             StructuredBuffer<float3> _PositionBuffer;
             StructuredBuffer<float3> _NormalBuffer;
             StructuredBuffer<float4> _TangentBuffer;
+            StructuredBuffer<float4> _ColorBuffer;
 
             float Random01(float seed)
             {
-                seed = frac(sin(seed) * 43758.5453);
+                seed = frac(sin(seed * 89.456) * 67890.5432 + 2.1234);
                 return seed;
             }
 
@@ -82,7 +88,7 @@ Shader "OilPaint/BrushStrokeInstancing" {
 
                 float3 strokeNormal = _NormalBuffer[instanceID].xyz;
                 float3 strokeTangent = _TangentBuffer[instanceID].xyz;
-                float3 vertexOffset = IN.vertex.xyz * float3(1.5, 1, 1);
+                float3 vertexOffset = IN.vertex.xyz * float3(1, 1, 1);
                 float3 binormal = -cross(strokeNormal, strokeTangent);
                 binormal += (Random01(instanceID) * 2 - 1) * _RotationRandomness * strokeTangent;
                 binormal = normalize(binormal);
@@ -101,19 +107,26 @@ Shader "OilPaint/BrushStrokeInstancing" {
                 o.uv = float2(uvX, uvY);
 
                 o.normalWS = normalize(TransformObjectToWorldNormal(strokeNormal));
+                o.tangentWS = normalize(TransformObjectToWorldNormal(strokeTangent));
+                o.binormalWS = normalize(cross(o.normalWS, o.tangentWS));
+                o.vertexColor = _ColorBuffer[instanceID];
                 return o;
             }
 
             float4 Fragment(Varyings IN) : SV_Target
             {
                 float4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, IN.uv);
-                float4 normal = SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, IN.uv);
                 clip(albedo.r - _AlphaCutoff);
-                Light mainLight = GetMainLight();
-                float ndotl = dot(IN.normalWS, mainLight.direction);
-                albedo.rgb = lerp(float3(1,1,1), float3(0.3, 0.3, 0.3), 1 - ndotl);
 
-                float4 output = albedo;
+                float3 normal = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, IN.uv), -_NormalStrength);
+                normal = normal.x * IN.tangentWS + normal.y * IN.binormalWS + normal.z * IN.normalWS;
+                normal = normalize(normal);
+
+                Light mainLight = GetMainLight();
+                float ndotl = dot(normal, mainLight.direction);
+                
+                float4 output = ndotl* IN.vertexColor;
+
 
                 return output;
             }
