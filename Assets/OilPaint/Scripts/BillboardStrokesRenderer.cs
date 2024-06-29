@@ -164,18 +164,19 @@ namespace OilPaint.Scripts {
             //draw vertex
             for (var i = 0; i < baseMeshFilter.mesh.vertices.Length; i++) {
                 var vert = baseMeshFilter.mesh.vertices[i];
-                Gizmos.color = Color.white;
-                Gizmos.DrawSphere(transform.TransformPoint(vert), 0.01f);
                 //normal
-                Gizmos.color = Color.green;
-                Gizmos.DrawLine(transform.TransformPoint(vert), transform.TransformPoint(vert + baseMeshFilter.mesh.normals[i] * 0.05f));
-                //tangent
-                Gizmos.color = Color.red;
-                Gizmos.DrawLine(transform.TransformPoint(vert), transform.TransformPoint(vert + (Vector3)baseMeshFilter.mesh.tangents[i] * 0.05f));
-                //binormal
-                Gizmos.color = Color.blue;
-                Gizmos.DrawLine(transform.TransformPoint(vert),
-                    transform.TransformPoint(vert - Vector3.Cross(baseMeshFilter.mesh.normals[i], (Vector3)baseMeshFilter.mesh.tangents[i]) * 0.05f));
+                // Gizmos.color = Color.green;
+                // Gizmos.DrawLine(transform.TransformPoint(vert), transform.TransformPoint(vert + baseMeshFilter.mesh.normals[i] * 0.05f));
+                // //tangent
+                // Gizmos.color = Color.red;
+                // Gizmos.DrawLine(transform.TransformPoint(vert), transform.TransformPoint(vert + (Vector3)baseMeshFilter.mesh.tangents[i] * 0.05f));
+                // //binormal
+                // Gizmos.color = Color.blue;
+                // Gizmos.DrawLine(transform.TransformPoint(vert),
+                //     transform.TransformPoint(vert - Vector3.Cross(baseMeshFilter.mesh.normals[i], (Vector3)baseMeshFilter.mesh.tangents[i]) * 0.05f));
+                var vertA = baseMeshFilter.mesh.colors[i].a;
+                Gizmos.color = new Color(vertA, vertA, vertA);
+                Gizmos.DrawSphere(transform.TransformPoint(vert), 0.01f);
             }
         }
 #endif

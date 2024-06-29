@@ -83,6 +83,7 @@ Shader "OilPaint/BrushStrokeInstancing" {
 
             Varyings Vertex(Attributes IN, uint instanceID : SV_InstanceID)
             {
+                float4 vertexColor = _ColorBuffer[instanceID];
                 float3 strokePosOS = _PositionBuffer[instanceID].xyz;
                 float3 meshPosWS = TransformObjectToWorld(0);
 
@@ -100,16 +101,19 @@ Shader "OilPaint/BrushStrokeInstancing" {
                 vertexOffset = x + y + z + Random01(instanceID) * _HeightOffset * strokeNormal;
 
                 Varyings o;
-                o.positionHCS = TransformWorldToHClip(meshPosWS + strokePosOS * _BaseMeshScale + vertexOffset * _Scale);
-
-                float uvX = IN.uv.x / _XCount + clamp(floor(Random01(instanceID) * _XCount), 0, _XCount - 1) / _XCount;
-                float uvY = IN.uv.y / _YCount + clamp(floor(Random01(instanceID) * _YCount), 0, _YCount - 1) / _YCount;
-                o.uv = float2(uvX, uvY);
-
+                o.positionHCS = TransformWorldToHClip(meshPosWS + strokePosOS * _BaseMeshScale + vertexOffset * _Scale * lerp(.5, 2, 1 - vertexColor.a));
                 o.normalWS = normalize(TransformObjectToWorldNormal(strokeNormal));
                 o.tangentWS = normalize(TransformObjectToWorldNormal(strokeTangent));
                 o.binormalWS = normalize(cross(o.normalWS, o.tangentWS));
-                o.vertexColor = _ColorBuffer[instanceID];
+                o.vertexColor = vertexColor;
+
+
+                //defined by vertex color alpha channel
+                float uvY = IN.uv.y / _YCount + floor(clamp(1 - o.vertexColor.a, 0, 0.999999) * _YCount) / _YCount;
+                //random pick one along x axis
+                float uvX = IN.uv.x / _XCount + floor(clamp(Random01(instanceID), 0, 0.999999) * _XCount) / _XCount;
+                o.uv = float2(uvX, uvY);
+
                 return o;
             }
 
@@ -124,9 +128,11 @@ Shader "OilPaint/BrushStrokeInstancing" {
 
                 Light mainLight = GetMainLight();
                 float ndotl = dot(normal, mainLight.direction);
-                
-                float4 output = ndotl* IN.vertexColor;
 
+                float4 output = 1;
+
+                output.rgb = lerp(IN.vertexColor.rgb, IN.vertexColor.rgb * _ShadowColor, 1-ndotl);
+                // output.rgb=IN.vertexColor.a;
 
                 return output;
             }
