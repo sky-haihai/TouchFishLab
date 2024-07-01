@@ -3,6 +3,8 @@ Shader "OilPaint/BrushStrokeInstancing" {
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
         _NormalTex ("Normal (RGB)", 2D) = "white" {}
         _NormalStrength ("Normal Strength", Float) = 1
+        _SpecularStrength ("Specular Strength", Float) = 1
+        _SpecularTintColor ("Specular Tint Color", Color) = (1,1,1,1)
         _YCount ("Row Count", Float) = 1
         _XCount ("Column Count", Float) = 1
         _ShadowColor ("Shadow Color", Color) = (0,0,0,1)
@@ -12,13 +14,14 @@ Shader "OilPaint/BrushStrokeInstancing" {
         Zwrite On
 
         Tags {
-            "RenderType"="Opaque"
-            "Queue"="Geometry"
+            "RenderType"="Transparent"
+            "Queue"="Transparent"
             "RenderPipeline"="UniversalRenderPipeline"
         }
 
         Pass {
             Name "BillboardForward"
+            Blend SrcAlpha OneMinusSrcAlpha
 
             Tags {
                 "LightMode" = "UniversalForward"
@@ -35,10 +38,11 @@ Shader "OilPaint/BrushStrokeInstancing" {
 
             UNITY_INSTANCING_BUFFER_START(Props)
                 UNITY_DEFINE_INSTANCED_PROP(float, _RotationRandomness)
-                UNITY_DEFINE_INSTANCED_PROP(float, _Scale)
-                UNITY_DEFINE_INSTANCED_PROP(float3, _BaseMeshScale)
+                UNITY_DEFINE_INSTANCED_PROP(float4x4, _TRSMatrix)
                 UNITY_DEFINE_INSTANCED_PROP(float, _HeightOffset)
                 UNITY_DEFINE_INSTANCED_PROP(float, _AlphaCutoff)
+                UNITY_DEFINE_INSTANCED_PROP(float, _ScaleMax)
+                UNITY_DEFINE_INSTANCED_PROP(float, _ScaleMin)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             struct Attributes
@@ -55,6 +59,7 @@ Shader "OilPaint/BrushStrokeInstancing" {
                 float3 tangentWS: TEXCOORD2;
                 float3 binormalWS: TEXCOORD3;
                 float4 vertexColor : TEXCOORD4;
+                float3 positionWS : TEXCOORD5;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -65,8 +70,10 @@ Shader "OilPaint/BrushStrokeInstancing" {
             SAMPLER(sampler_NormalTex);
 
             float _NormalStrength;
+            float _SpecularStrength;
             float _XCount;
             float _YCount;
+            float3 _SpecularTintColor;
             float3 _ShadowColor;
 
             StructuredBuffer<float3> _PositionBuffer;
@@ -85,11 +92,9 @@ Shader "OilPaint/BrushStrokeInstancing" {
             {
                 float4 vertexColor = _ColorBuffer[instanceID];
                 float3 strokePosOS = _PositionBuffer[instanceID].xyz;
-                float3 meshPosWS = TransformObjectToWorld(0);
-
                 float3 strokeNormal = _NormalBuffer[instanceID].xyz;
                 float3 strokeTangent = _TangentBuffer[instanceID].xyz;
-                float3 vertexOffset = IN.vertex.xyz * float3(1, 1, 1);
+                float3 vertexOffset = IN.vertex.xyz * float3(1.5, 1, 1);
                 float3 binormal = -cross(strokeNormal, strokeTangent);
                 binormal += (Random01(instanceID) * 2 - 1) * _RotationRandomness * strokeTangent;
                 binormal = normalize(binormal);
@@ -101,15 +106,18 @@ Shader "OilPaint/BrushStrokeInstancing" {
                 vertexOffset = x + y + z + Random01(instanceID) * _HeightOffset * strokeNormal;
 
                 Varyings o;
-                o.positionHCS = TransformWorldToHClip(meshPosWS + strokePosOS * _BaseMeshScale + vertexOffset * _Scale * lerp(.5, 2, 1 - vertexColor.a));
-                o.normalWS = normalize(TransformObjectToWorldNormal(strokeNormal));
-                o.tangentWS = normalize(TransformObjectToWorldNormal(strokeTangent));
+                float3 worldPos = strokePosOS + vertexOffset * lerp(_ScaleMin, _ScaleMax, vertexColor.a);
+                worldPos = mul(_TRSMatrix, float4(worldPos, 1)).xyz;
+                o.positionHCS = TransformWorldToHClip(worldPos);
+                o.positionWS = worldPos;
+                o.normalWS = normalize(mul(_TRSMatrix, float4(strokeNormal, 0)).xyz);
+                o.tangentWS = normalize(mul(_TRSMatrix, float4(strokeTangent, 0)).xyz);
                 o.binormalWS = normalize(cross(o.normalWS, o.tangentWS));
                 o.vertexColor = vertexColor;
 
 
                 //defined by vertex color alpha channel
-                float uvY = IN.uv.y / _YCount + floor(clamp(1 - o.vertexColor.a, 0, 0.999999) * _YCount) / _YCount;
+                float uvY = IN.uv.y / _YCount + floor(clamp(o.vertexColor.a, 0, 0.999999) * _YCount) / _YCount;
                 //random pick one along x axis
                 float uvX = IN.uv.x / _XCount + floor(clamp(Random01(instanceID), 0, 0.999999) * _XCount) / _XCount;
                 o.uv = float2(uvX, uvY);
@@ -120,20 +128,34 @@ Shader "OilPaint/BrushStrokeInstancing" {
             float4 Fragment(Varyings IN) : SV_Target
             {
                 float4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, IN.uv);
-                clip(albedo.r - _AlphaCutoff);
+                clip(albedo.a - _AlphaCutoff);
+                // return albedo;
+                Light mainLight = GetMainLight();
 
-                float3 normal = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, IN.uv), -_NormalStrength);
+                float ndoth = dot(normalize(mainLight.direction + _WorldSpaceCameraPos.xyz - IN.positionWS), IN.normalWS);
+                // ndoth = 1 - ndoth;
+                ndoth = smoothstep(.85, .9, ndoth);
+                // return float4(ndoth, ndoth, ndoth, 1);
+                float3 normal = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, IN.uv), -_NormalStrength * (ndoth));
                 normal = normal.x * IN.tangentWS + normal.y * IN.binormalWS + normal.z * IN.normalWS;
                 normal = normalize(normal);
-
-                Light mainLight = GetMainLight();
                 float ndotl = dot(normal, mainLight.direction);
+                // float ndotl = dot(IN.normalWS, mainLight.direction);
+
+                ndoth = dot(normalize(mainLight.direction + _WorldSpaceCameraPos.xyz - IN.positionWS), normal);
+                // ndoth = smoothstep(.95, 1., ndoth);
+
+                // return float4(ndoth, ndoth, ndoth, 1);
 
                 float4 output = 1;
 
-                output.rgb = lerp(IN.vertexColor.rgb, IN.vertexColor.rgb * _ShadowColor, 1-ndotl);
+                output.rgb = lerp(IN.vertexColor.rgb + pow(saturate(ndoth), _SpecularStrength) * IN.vertexColor.rgb * _SpecularTintColor,
+                                  saturate(IN.vertexColor.rgb * _ShadowColor),
+                                  saturate(1 - ndotl));
+                // output.rgb = IN.normalWS;
                 // output.rgb=IN.vertexColor.a;
 
+                output.a = albedo.a;
                 return output;
             }
             ENDHLSL

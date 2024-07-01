@@ -11,7 +11,8 @@ namespace OilPaint.Scripts {
         public MeshRenderer baseMeshRenderer;
 
         // material
-        public float scale = 1;
+        public float scaleMax = 1;
+        public float scaleMin = 0;
 
         [Range(0, 1f)]
         public float rotationRandomness = 0.5f;
@@ -34,8 +35,9 @@ namespace OilPaint.Scripts {
         private float m_CachedBumpiness = 0;
         private float m_CachedAlphaCutoff = 0;
 
-
+        // [SerializeField]
         private Material m_InstancedMaterial;
+
         private ComputeBuffer m_PositionBuffer;
         private ComputeBuffer m_NormalBuffer;
         private ComputeBuffer m_TangentBuffer;
@@ -47,12 +49,13 @@ namespace OilPaint.Scripts {
         private static readonly int PositionBuffer = Shader.PropertyToID("_PositionBuffer");
         private static readonly int NormalBuffer = Shader.PropertyToID("_NormalBuffer");
         private static readonly int TangentBuffer = Shader.PropertyToID("_TangentBuffer");
-        private static readonly int Scale = Shader.PropertyToID("_Scale");
         private static readonly int RotationRandomness = Shader.PropertyToID("_RotationRandomness");
-        private static readonly int BaseMeshScale = Shader.PropertyToID("_BaseMeshScale");
+        private static readonly int TRSMatrix = Shader.PropertyToID("_TRSMatrix");
         private static readonly int HeightOffset = Shader.PropertyToID("_HeightOffset");
         private static readonly int AlphaCutoff = Shader.PropertyToID("_AlphaCutoff");
         private static readonly int ColorBuffer = Shader.PropertyToID("_ColorBuffer");
+        private static readonly int ScaleMin = Shader.PropertyToID("_ScaleMin");
+        private static readonly int ScaleMax = Shader.PropertyToID("_ScaleMax");
 
         private void OnValidate() {
             if (baseMeshFilter == null) baseMeshFilter = GetComponent<MeshFilter>();
@@ -60,28 +63,24 @@ namespace OilPaint.Scripts {
         }
 
         void Start() {
-            if (m_PositionBuffer == null) m_PositionBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
-            if (m_NormalBuffer == null) m_NormalBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
-            if (m_TangentBuffer == null) m_TangentBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
-            if (m_ColorBuffer == null) m_ColorBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
-
-            if (m_ArgsBuffer == null) m_ArgsBuffer = new ComputeBuffer(1, m_Args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
-            if (m_InstancedMaterial == null) m_InstancedMaterial = new Material(material);
-
-            m_PropertyBlock = new MaterialPropertyBlock();
-            UpdateBuffers();
-            baseMeshRenderer.enabled = false;
+            Init();
         }
 
-        private void OnEnable() {
-            if (m_PositionBuffer == null) m_PositionBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
-            if (m_NormalBuffer == null) m_NormalBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 3 * sizeof(float));
-            if (m_TangentBuffer == null) m_TangentBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
-            if (m_ColorBuffer == null) m_ColorBuffer = new ComputeBuffer(baseMeshFilter.mesh.vertexCount, 4 * sizeof(float));
+        void Init() {
+            m_InstancedMaterial = null;
+            if (material == null) {
+                return;
+            }
 
-            if (m_ArgsBuffer == null) m_ArgsBuffer = new ComputeBuffer(1, m_Args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
-            if (m_InstancedMaterial == null) m_InstancedMaterial = new Material(material);
-            baseMeshRenderer.enabled = false;
+            var vertexCount = baseMeshFilter.mesh.vertexCount;
+            m_PositionBuffer = new ComputeBuffer(vertexCount, 3 * sizeof(float));
+            m_NormalBuffer = new ComputeBuffer(vertexCount, 3 * sizeof(float));
+            m_TangentBuffer = new ComputeBuffer(vertexCount, 4 * sizeof(float));
+            m_ColorBuffer = new ComputeBuffer(vertexCount, 4 * sizeof(float));
+            m_ArgsBuffer = new ComputeBuffer(1, m_Args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+            m_InstancedMaterial = new Material(material);
+
+            m_PropertyBlock = new MaterialPropertyBlock();
         }
 
         void Update() {
@@ -95,7 +94,16 @@ namespace OilPaint.Scripts {
 
             // Render
             Graphics.DrawMeshInstancedIndirect(mesh, 0, m_InstancedMaterial, new Bounds(transform.position, m_Dimension), m_ArgsBuffer, 0, m_PropertyBlock,
-                ShadowCastingMode.On, true, layer, renderInSceneCamera ? null : UnityEngine.Camera.main);
+                ShadowCastingMode.On, true, layer, renderInSceneCamera ? null : Camera.main);
+        }
+
+        private void OnDestroy() {
+            m_InstancedMaterial = null;
+            m_PositionBuffer?.Dispose();
+            m_NormalBuffer?.Dispose();
+            m_TangentBuffer?.Dispose();
+            m_ColorBuffer?.Dispose();
+            m_ArgsBuffer?.Dispose();
         }
 
         void UpdateBuffers() {
@@ -113,16 +121,19 @@ namespace OilPaint.Scripts {
             m_NormalBuffer.SetData(baseMeshFilter.mesh.normals);
             m_TangentBuffer.SetData(baseMeshFilter.mesh.tangents);
             m_ColorBuffer.SetData(baseMeshFilter.mesh.colors);
+
             m_InstancedMaterial.SetBuffer(PositionBuffer, m_PositionBuffer);
             m_InstancedMaterial.SetBuffer(NormalBuffer, m_NormalBuffer);
             m_InstancedMaterial.SetBuffer(TangentBuffer, m_TangentBuffer);
             m_InstancedMaterial.SetBuffer(ColorBuffer, m_ColorBuffer);
 
-            m_PropertyBlock.SetFloat(Scale, scale);
             m_PropertyBlock.SetFloat(RotationRandomness, rotationRandomness);
-            m_PropertyBlock.SetVector(BaseMeshScale, transform.localScale);
+            m_PropertyBlock.SetMatrix(TRSMatrix, transform.localToWorldMatrix);
             m_PropertyBlock.SetFloat(HeightOffset, bumpiness);
             m_PropertyBlock.SetFloat(AlphaCutoff, alphaCutoff);
+            scaleMin = Mathf.Clamp(scaleMin, 0, scaleMax);
+            m_PropertyBlock.SetFloat(ScaleMin, scaleMin);
+            m_PropertyBlock.SetFloat(ScaleMax, scaleMax);
 
             // Args
             // 0 index count per instance,
@@ -138,13 +149,6 @@ namespace OilPaint.Scripts {
             m_ArgsBuffer.SetData(m_Args);
 
             m_CachedDimension = m_Dimension;
-        }
-
-        void OnDisable() {
-            if (m_ArgsBuffer != null)
-                m_ArgsBuffer.Release();
-            m_ArgsBuffer = null;
-            baseMeshRenderer.enabled = true;
         }
 
 #if UNITY_EDITOR
