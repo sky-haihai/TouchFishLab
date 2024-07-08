@@ -12,12 +12,15 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _NORMALMAP
   - _RECEIVESHADOWS_ON
-  - _USENORMALMAP_ON
+  - _SPECULARHIGHLIGHTS_OFF
   m_InvalidKeywords:
   - _ENABLESHADOW_ON
   - _ENVREFLECTION_ON
   - _SHADOWSTYLE_ON
+  - _USEENVREFLECTION_ON
+  - _USENORMALMAP_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -29,11 +32,11 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 3a0fc5b15676074438c1ccf7085234a7, type: 3}
+        m_Texture: {fileID: 2800000, guid: 49043d797e4fd5946afb73daf81c84c7, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 543e985d764a3d34cbc839951792a113, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _DetailAlbedoMap:
@@ -77,7 +80,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _RampTex:
-        m_Texture: {fileID: 2800000, guid: f246543d4661ea949b639dcdb12d5be3, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _SpecGlossMap:
@@ -99,7 +102,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _AlphaClip: 0
-    - _AlphaCutoff: 0.27
+    - _AlphaCutoff: 0.421
     - _AlphaTestToggle: 0
     - _AlphaToMask: 0
     - _Blend: 0
@@ -119,6 +122,8 @@ Material:
     - _DstBlendAlpha: 0
     - _EdgeAlpha: 0.5
     - _EmissionToggle: 0
+    - _EnableBumpMap: 1
+    - _EnableSpecular: 0
     - _EnvReflection: 1
     - _EnvironmentReflections: 1
     - _FresnelIntensity: 1
@@ -133,7 +138,7 @@ Material:
     - _HeightOffset: 0.27
     - _MapToggle: 0
     - _MetalReflProbeIntensity: 0.5
-    - _Metallic: 0.1
+    - _Metallic: 0.537
     - _NormalIntensity: 7
     - _NormalMapToggle: 0
     - _OcclusionMapToggle: 0
@@ -148,7 +153,7 @@ Material:
     - _ScaleMin: 0
     - _ShadowLayer: 3
     - _ShadowStyle: 1
-    - _Smoothness: 0.365
+    - _Smoothness: 0.222
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SpecularIntensity: 4.85
@@ -159,7 +164,7 @@ Material:
     - _Surface: 0
     - _ToneOffset: 0.5
     - _UseEmission: 0
-    - _UseEnvReflection: 0
+    - _UseEnvReflection: 1
     - _UseNormalMap: 1
     - _WorkflowMode: 1
     - _WorkflowToggle: 0

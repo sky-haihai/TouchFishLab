@@ -144,7 +144,7 @@ Material:
     - _ScaleMin: 0
     - _ShadowLayer: 3
     - _ShadowStyle: 1
-    - _Smoothness: 0.011
+    - _Smoothness: 0
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SpecularIntensity: 4.85
